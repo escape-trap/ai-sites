@@ -1,4 +1,4 @@
-name: Auto AI Site Deploy
+name: AI Tool Site Deploy
 
 on:
   workflow_dispatch:
@@ -9,20 +9,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Generate Site
+      - name: Generate Tool
+        run: python ai_tool_generator.py
+
+      - name: Build Site
         run: python generator.py
 
-      - name: Commit
-        run: |
-          git config user.name "AI Agent"
-          git config user.email "ai@system.local"
-          git add .
-          git commit -m "Auto site build" || echo "No changes"
+      - name: SEO Check
+        run: python seo_check.py sites/*/index.html
 
-      - name: Push
-        run: git push
+      - name: Save Metadata
+        run: python firestore_save.py || echo "Firestore optional"
+
+      - name: Cleanup
+        run: python cleanup.py
+
+      - name: Commit & Push
+        run: |
+          git add .
+          git commit -m "AI tool site" || echo "No changes"
+          git push
