@@ -1,35 +1,80 @@
-name: AI Tool Site Deploy
+name: AI Tool Site – Full Auto Deploy
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      # 1️⃣ Get code
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2️⃣ Python for generators
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Generate Tool
-        run: python ai_tool_generator.py
+      # 3️⃣ Install Python deps (safe + minimal)
+      - name: Install Python dependencies
+        run: |
+          pip install requests beautifulsoup4 google-cloud-firestore
 
+      # 4️⃣ Generate AI tool using Gemini
+      - name: Generate AI Tool (Gemini)
+        run: python ai_tool_generator.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # 5️⃣ Build site from template
       - name: Build Site
         run: python generator.py
 
-      - name: SEO Check
-        run: python seo_check.py sites/*/index.html
+      # 6️⃣ SEO + AdSense safety checks
+      - name: SEO Validation
+        run: |
+          for f in sites/*/index.html; do
+            python seo_check.py "$f"
+          done
 
-      - name: Save Metadata
-        run: python firestore_save.py || echo "Firestore optional"
+      # 7️⃣ Save metadata (optional, non-blocking)
+      - name: Save metadata to Firestore
+        run: python firestore_save.py || echo "Firestore skipped"
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_KEY }}
 
-      - name: Cleanup
+      # 8️⃣ Auto cleanup (prevents thin content / penalties)
+      - name: Cleanup old sites
         run: python cleanup.py
 
-      - name: Commit & Push
+      # 9️⃣ Commit generated content
+      - name: Commit changes
         run: |
+          git config user.name "AI Agent"
+          git config user.email "ai@system.local"
           git add .
-          git commit -m "AI tool site" || echo "No changes"
-          git push
+          git commit -m "Auto AI tool site deploy" || echo "No changes"
+
+      - name: Push changes
+        run: git push
+
+      # 🔟 Deploy to Cloudflare Pages (NO OAuth)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Deploy to Cloudflare Pages
+        run: |
+          wrangler pages deploy . \
+            --project-name=ai-sites \
+            --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
